@@ -1,35 +1,37 @@
 //-----------------------------------------------------------------------------------------------------vars & constructors init
 const pi = Math.PI;
-var canvas = document.getElementById("c");
-var ctx = canvas.getContext("2d"); // dynamic
+let canvas = document.getElementById("c");
+let ctx = canvas.getContext("2d"); // dynamic
 
-var canvas2 = document.getElementById("c2");
-var ctx2 = canvas2.getContext("2d"); // static
+let canvas2 = document.getElementById("c2");
+let ctx2 = canvas2.getContext("2d"); // static
 //colors
 canvas.style.backgroundColor = "#000"; //around maze fill
 const floorCol = "#555";
 const shadowCol = "#111"
 
-var w = canvas.width = canvas2.width = window.innerWidth;
-var h = canvas.height = canvas2.height = window.innerHeight;
-var l = ctx2.lineWidth = 10;
-var tab = 90; 
-const scale = 0.7;
-const ws = 0.7; //wall scale
-const vision = 500;
-const shadR = 10;
+let w = canvas.width = canvas2.width = window.innerWidth;
+let winH = window.innerHeight;
+let h = canvas.height = canvas2.height = 2*winH;
+let l = ctx2.lineWidth = 10;
+let PAUSE = false;
+const tab = 90; 
+const scale = tab/128;
+const ws = scale; //wall scale
+const vision = 500; //sight radius
+const shadR = 10; //zombie shadow circle radius
 const sqVision = vision*vision;
-var segments = []; // for shadow casting
-var shield = []; // no eyes on players back
-var field = []; // for vfield generator
+let segments = []; // for shadow casting
+let shield = []; // no eyes on players back
+let field = []; // for vfield generator
 
-var width = ~~((w-tab*2)/tab); // maze size params
-var height = ~~((h-tab*2)/tab);
+let width = ~~((w-tab*2)/tab); // maze size params
+let height = ~~((h-tab*2)/tab);
 
-var temp;
-var s = {x:tab,y:tab}; // startPoint
+let temp;
+let s = {x:tab,y:tab}; // startPoint
 
-var player = {
+let player = {
     i: 0,
     j: 0,
     x: s.x+tab/2,
@@ -39,14 +41,14 @@ var player = {
     shoots: false,
     HIT: null,
     hit(){
-        var self = this;
+        let self = this;
         for(let i in bots){
-            var target = Math.atan2(bots[i].y-self.y,bots[i].x-self.x);
+            let target = Math.atan2(bots[i].y-self.y,bots[i].x-self.x);
             if(mod360(mod360(target)-mod360(dir.angle)) < pi/16 || mod360(mod360(dir.angle)-mod360(target)) < pi/16){
-                var intersects = [];
-                var ray = {a: self, b: cursor};
+                let intersects = [];
+                let ray = {a: self, b: cursor};
                 for (let seg of segments){
-                    var dot = segRay(seg,ray);
+                    let dot = segRay(seg,ray);
                     if(dot) intersects.push({dot:dot,seg:seg});
                 }
                 if(intersects.length){
@@ -84,18 +86,18 @@ function bot(i,j,x,y,dir=0,step=3){// default dir & step
     this.angle = 0;
     this.dead = false;
     this.attacks = function (){
-        var self = this;
+        let self = this;
         return field[self.i][self.j].dist == 1;
     };
     this.rotSteps = function(){
-        var self = this;
-        var n = 10; // frames for rotation
+        let self = this;
+        let n = 10; // frames for rotation
         if(mod360(self.angle-dirToArc(self.dir))>1 && !self.steps.length){
             self.steps = [];
-            var start = self.angle;
-            var stop = dirToArc(self.dir);
+            let start = self.angle;
+            let stop = dirToArc(self.dir);
             self.angle = stop;
-            var inner = mod360(stop-start), outer = mod360(start-stop)
+            let inner = mod360(stop-start), outer = mod360(start-stop)
             if(inner < outer)
                 for(let i=0; i<n; i++){
                     self.steps.push(start += inner/n)
@@ -111,21 +113,21 @@ function tile(dist,dir){ // vector field units
     this.dist = dist;
     this.dir = dir;
 };
-var bot1 = new bot(0, width-1, s.x+(width-1)*tab+tab/2, s.y+tab/2);
-var bot2 = new bot(height-1, 0, s.x+tab/2, s.y+(height-1)*tab+tab/2);
-var bot3 = new bot(height-1, width-1, s.x+(width-1)*tab+tab/2, s.y+(height-1)*tab+tab/2);
-var bots = [bot1,bot2,bot3];
+let bot1 = new bot(0, width-1, s.x+(width-1)*tab+tab/2, s.y+tab/2);
+let bot2 = new bot(height-1, 0, s.x+tab/2, s.y+(height-1)*tab+tab/2);
+let bot3 = new bot(height-1, width-1, s.x+(width-1)*tab+tab/2, s.y+(height-1)*tab+tab/2);
+let bots = [bot1,bot2,bot3];
 
-var maze = []; // for storing rows
-var row = [];  // for storing cells
-var sets = new Array(width); //each set has 1 initial cell
+let maze = []; // for storing rows
+let row = [];  // for storing cells
+let sets = new Array(width); //each set has 1 initial cell
 function cell(lower, right, set){ // cell structure
 	this.l = lower;  // right and lower walls
 	this.r = right; // boolean parameters standing for 
 	this.s = set; // number of set cell belongs to
 };
 function sprite (sptiteSheet, n, speed=1, scaler=1){
-    var that = {};
+    let that = {};
     
     that.img = sptiteSheet;
     that.width = sptiteSheet.width/n;
@@ -163,48 +165,48 @@ function sprite (sptiteSheet, n, speed=1, scaler=1){
     return that;
 };
 //sprite mechanism initializing
-var walk, idle, zombWalk = [], zombHit = [], shot, gotHit, zombDeath = [];
-var temp1 = new Image();
+let walk, idle, zombWalk = [], zombHit = [], shot, gotHit, zombDeath = [];
+let temp1 = new Image();
 temp1.src = "sprites/player_walk.png";
 temp1.onload = function(){walk = sprite(temp1, 12, 0.6);}
-var temp3 = new Image();
+let temp3 = new Image();
 temp3.src = "sprites/player_idle.png";
 temp3.onload = function(){idle = sprite(temp3, 20, 0.7);}
-var temp4 = new Image();
+let temp4 = new Image();
 temp4.src = "sprites/zombie1_walk.png";
 temp4.onload = function(){
     for(let i=0;i<3;i++)
         zombWalk[i] = sprite(temp4, 20);
 }
-var temp5 = new Image();
+let temp5 = new Image();
 temp5.src = "sprites/zombie1_hit.png";
 temp5.onload = function(){
     for(let i=0;i<3;i++)
         zombHit[i] = sprite(temp5, 20, 0.8);
 }
-var temp6 = new Image();
+let temp6 = new Image();
 temp6.src = "sprites/player_shot.png";
 temp6.onload = function(){shot = sprite(temp6, 20, 0.7);}
-var temp7 = new Image();
+let temp7 = new Image();
 temp7.src = "sprites/player_gotHit.png";
 temp7.onload = function(){gotHit = sprite(temp7, 9, 0.5);}
-var temp8 = new Image();
+let temp8 = new Image();
 temp8.src = "sprites/zombie_death1.png";
 temp8.onload = function(){
     for(let i=0;i<3;i++)
         zombDeath[i] = sprite(temp8, 19, 0.4);
 }
-var floor = new Image();
+let floor = new Image();
 floor.src = "sprites/floor.jpg";
-var floorPat; 
+let floorPat; 
 floor.onload = function(){floorPat = ctx.createPattern(floor, 'repeat');};
-var rw = new Image(); 
+let rw = new Image(); 
 rw.src = "sprites/right_wall.jpg";
-var lw = new Image();
+let lw = new Image();
 lw.src = "sprites/lower_wall.jpg";
 
-var lasTdT = null;
-var cursor={
+let lasTdT = null;
+let cursor={
   x: player.x,
   y: player.y,
 };
@@ -216,13 +218,13 @@ function segment(a,b){
     this.a = a;
     this.b = b;
 }
-var go = {
+let go = {
     Dn : tab,
     Rt : tab,
     Lt : tab,
     Up : tab,
 };
-var dir = {
+let dir = {
     update() {
         for (i in this){
             if(typeof(this[i])!='function')
@@ -258,15 +260,15 @@ function consistsIn(arr,seg){
     }
     return false;
 }
-var visibles = [];
+let visibles = [];
 function getVisibles(segments,player){
     visibles = []; // if not in visible when add
-    var intersects = [];
-    for(var v=0;v<Math.PI*2;v+=0.01){ // try different angle increment
+    let intersects = [];
+    for(let v=0;v<Math.PI*2;v+=0.01){ // try different angle increment
         intersects = [];
         ray = {a:player, b:{x:Math.cos(v)*10+player.x,y:Math.sin(v)*10+player.y,},};
         for(seg of segments){
-            var dot = segRay(seg,ray);
+            let dot = segRay(seg,ray);
             if(dot) intersects.push({dot:dot,seg:seg});
         }
         if(intersects.length){
@@ -290,19 +292,19 @@ function between(a,x,b){
 }
 function segRay(seg,ray){ 
     if(seg.a.x == seg.b.x){
-        var y = getLineY(seg.a.x,ray);
+        let y = getLineY(seg.a.x,ray);
         if(between(seg.a.y,y,seg.b.y)){
-            var rayVec = {x:ray.b.x-ray.a.x, y: ray.b.y-ray.a.y};
-            var segVec = {x:seg.b.x-ray.a.x, y: y-ray.a.y};
+            let rayVec = {x:ray.b.x-ray.a.x, y: ray.b.y-ray.a.y};
+            let segVec = {x:seg.b.x-ray.a.x, y: y-ray.a.y};
             if(Math.abs(vecAngle(rayVec)-vecAngle(segVec)) < 1)
                 return {x:seg.a.x, y:y};
         }
     }
     else{
-        var x = getLineX(seg.a.y,ray);
+        let x = getLineX(seg.a.y,ray);
         if(between(seg.a.x,x,seg.b.x)){
-            var rayVec = {x:ray.b.x-ray.a.x, y: ray.b.y-ray.a.y};
-            var segVec = {x:x-ray.a.x, y: seg.b.y-ray.a.y};
+            let rayVec = {x:ray.b.x-ray.a.x, y: ray.b.y-ray.a.y};
+            let segVec = {x:x-ray.a.x, y: seg.b.y-ray.a.y};
             if(Math.abs(vecAngle(rayVec)-vecAngle(segVec)) < 1)
                 return {x:x, y:seg.a.y};
         } 
@@ -333,13 +335,13 @@ function sqmod(a){
     return a.x*a.x + a.y*a.y;
 }
 function shadow(a,b,l=vision,col=shadowCol){ 
-    var a1 = {x: a.x-b.x, y: a.y-b.y};
-	var len = Math.sqrt(sqmod(a1));
-	var aNew = {x: a.x+a1.x/len, y:a.y+a1.y/len};
-	var bNew = {x: b.x-a1.x/len, y:b.y-a1.y/len};
+    let a1 = {x: a.x-b.x, y: a.y-b.y};
+	let len = Math.sqrt(sqmod(a1));
+	let aNew = {x: a.x+a1.x/len, y:a.y+a1.y/len};
+	let bNew = {x: b.x-a1.x/len, y:b.y-a1.y/len};
 	a=aNew;b=bNew;
-    var l1=Math.sqrt(sqdist(a,player));
-	var l2=Math.sqrt(sqdist(b,player));
+    let l1=Math.sqrt(sqdist(a,player));
+	let l2=Math.sqrt(sqdist(b,player));
     
     let v1 = {x:(a.x-player.x)*(l/l1),y:(a.y-player.y)*(l/l1)}
 	let v2 = {x:(b.x-player.x)*(l/l2),y:(b.y-player.y)*(l/l2)}
@@ -360,12 +362,12 @@ function shadow(a,b,l=vision,col=shadowCol){
 
 function generateShield(){
     shield = [];
-    var arc = 3*Math.PI/2;
-    var start = dir.angle + pi/4;
-    var n = 3;
-    var prev = new dot(player.x + Math.cos(start)*10, player.y + Math.sin(start)*10);
+    let arc = 3*Math.PI/2;
+    let start = dir.angle + pi/4;
+    let n = 3;
+    let prev = new dot(player.x + Math.cos(start)*10, player.y + Math.sin(start)*10);
     for(let i=start+arc/n, j=0; j<n; i+=arc/n,j++){
-        var cur = new dot(player.x + Math.cos(i)*10, player.y + Math.sin(i)*10);
+        let cur = new dot(player.x + Math.cos(i)*10, player.y + Math.sin(i)*10);
         shield.push(new segment(prev,cur));
         prev = cur;
     }
@@ -378,7 +380,7 @@ function Vfield(){
 		field.push(new Array());
 	i = player.i;
 	j = player.j;
-	var stack=["last"]; // stop item
+	let stack=["last"]; // stop item
 	field[i][j]= new tile(0,0);
 	
 	do{
@@ -489,7 +491,7 @@ KEY={
     key68:false, // d
     key65:false, // a
 };
-function touch(e){
+/*function touch(e){
 	if(e.changedTouches[0]){
         KEY["key87"]=true;
         cursor.x = e.changedTouches[0].pageX;
@@ -497,19 +499,23 @@ function touch(e){
     }
     if(e.changedTouches[1]){player.shoots=true; player.hit();}//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 	
-};
+};*/
 document.addEventListener("mousedown",function(e){
     player.shoots=true; 
     player.hit();
     });
-document.addEventListener("mousemove",function(e){cursor.x=e.clientX;cursor.y=e.clientY;});
-document.addEventListener("keydown",function(e){KEY["key"+e.keyCode]=true;});
+document.addEventListener("mousemove",function(e){cursor.x=e.pageX;cursor.y=e.pageY;});
+document.addEventListener("keydown",function(e){
+	KEY["key"+e.keyCode]=true;
+	if(e.keyCode==118)
+		PAUSE=!PAUSE;
+});
 document.addEventListener("keyup",function(e){KEY["key"+e.keyCode]=false;});
-document.addEventListener("touchstart", touch);
+/*document.addEventListener("touchstart", touch);
 document.addEventListener("touchmove",touch);
 document.addEventListener("touchend",function(e){
 	if(e.changedTouches[0])KEY["key87"]=false;
-});
+});*/
 
 //---------------------------------------------------------------------------------------draw maze
 lw.onload = function(){
@@ -559,7 +565,8 @@ lw.onload = function(){
 //----------------------------------------------------------------------------------------------------------------------------------game loop
 function draw(dT){
     if(!lasTdT) lasTdT = dT;
-    if(dT-lasTdT > 32){
+    if(dT-lasTdT > 32 && !PAUSE){
+    	window.scrollTo(0, player.y-winH/2);
         Vfield();
         //floor fill
         ctx.clearRect(0,0,w,h);
