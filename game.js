@@ -18,7 +18,7 @@ let PAUSE = false;
 const tab = 90; 
 const scale = tab/128;
 const ws = scale; //wall scale
-const vision = 500; //sight radius
+const vision = 300; //sight radius
 const shadR = 10; //zombie shadow circle radius
 const sqVision = vision*vision;
 let segments = []; // for shadow casting
@@ -507,7 +507,7 @@ document.addEventListener("mousedown",function(e){
 document.addEventListener("mousemove",function(e){cursor.x=e.pageX;cursor.y=e.pageY;});
 document.addEventListener("keydown",function(e){
 	KEY["key"+e.keyCode]=true;
-	if(e.keyCode==118)
+	if(e.keyCode==119)
 		PAUSE=!PAUSE;
 });
 document.addEventListener("keyup",function(e){KEY["key"+e.keyCode]=false;});
@@ -692,11 +692,13 @@ function draw(dT){
         
         //cast shadows underneath player
         
-        /* getVisibles(segments,player); */
         generateShield();// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
         for (let i of shield){
             shadow(i.a,i.b,vision*2);
         }
+
+        //getVisibles(segments,player);
+
         for (let i of segments){
             let dist = Math.min(sqdist(player,i.a),sqdist(player,i.b));
             if(dist < sqVision)
