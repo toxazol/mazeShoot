@@ -6,14 +6,14 @@ let ctx = canvas.getContext("2d"); // dynamic
 let canvas2 = document.getElementById("c2");
 let ctx2 = canvas2.getContext("2d"); // static
 //colors
-canvas.style.backgroundColor = "#000"; //around maze fill
+canvas.style.backgroundColor = "#111"; //around maze fill
 const floorCol = "#555";
 const shadowCol = "#111"
 
 let w = canvas.width = canvas2.width = window.innerWidth;
 let winH = window.innerHeight;
 let h = canvas.height = canvas2.height = 2*winH;
-let l = ctx2.lineWidth = 10;
+
 let PAUSE = false;
 const tab = 90; 
 const scale = tab/128;
@@ -42,6 +42,8 @@ let player = {
     HIT: null,
     hit(){
         let self = this;
+        self.HIT = null;
+        let minDist = Infinity;
         for(let i in bots){
             let target = Math.atan2(bots[i].y-self.y,bots[i].x-self.x);
             if(mod360(mod360(target)-mod360(dir.angle)) < pi/16 || mod360(mod360(dir.angle)-mod360(target)) < pi/16){
@@ -53,15 +55,14 @@ let player = {
                 }
                 if(intersects.length){
                     intersects.sort(function(a,b){return sqdist(a.dot,self)-sqdist(b.dot,self);});
-                    if(sqdist(intersects[0].dot,self) > sqdist(bots[i],self)){
+                    let botDist = sqdist(bots[i],self);
+                    if(sqdist(intersects[0].dot,self) > botDist && botDist < minDist){
                         self.HIT = i; 
-                        return;
+                        minDist = botDist;
                     }
                 }
-               
             }
         }
-        self.HIT = null;
     },
     gotHit(){
         for(let bot of bots){
@@ -334,30 +335,28 @@ function sqdist(a,b){
 function sqmod(a){
     return a.x*a.x + a.y*a.y;
 }
-function shadow(a,b,l=vision,col=shadowCol){ 
-    let a1 = {x: a.x-b.x, y: a.y-b.y};
+function shadow(a,b,l=vision*2,col=shadowCol){ 
+	let a1 = {x: a.x-b.x, y: a.y-b.y};
 	let len = Math.sqrt(sqmod(a1));
 	let aNew = {x: a.x+a1.x/len, y:a.y+a1.y/len};
 	let bNew = {x: b.x-a1.x/len, y:b.y-a1.y/len};
 	a=aNew;b=bNew;
-    let l1=Math.sqrt(sqdist(a,player));
+	let l1=Math.sqrt(sqdist(a,player));
 	let l2=Math.sqrt(sqdist(b,player));
-    
-    let v1 = {x:(a.x-player.x)*(l/l1),y:(a.y-player.y)*(l/l1)}
+
+	let v1 = {x:(a.x-player.x)*(l/l1),y:(a.y-player.y)*(l/l1)}
 	let v2 = {x:(b.x-player.x)*(l/l2),y:(b.y-player.y)*(l/l2)}
-    
-    ctx.fillStyle = col;
-	ctx.strokeStyle = col;
+
+	ctx.fillStyle = col;
+	// ctx.strokeStyle = col;
 	ctx.beginPath();
 	ctx.moveTo(a.x,a.y);
-	
-    ctx.lineTo(a.x+v1.x,a.y+v1.y);//ctx.stroke();
+	ctx.lineTo(a.x+v1.x,a.y+v1.y);//ctx.stroke();
 	ctx.lineTo(b.x+v2.x,b.y+v2.y);//ctx.stroke();
-    
 	ctx.lineTo(b.x,b.y);//ctx.stroke();
 	ctx.lineTo(a.x,a.y);//ctx.stroke();
 	ctx.fill();
-	ctx.closePath();
+	//ctx.closePath();
 }
 
 function generateShield(){
@@ -543,14 +542,14 @@ lw.onload = function(){
                     ctx2.drawImage(rw, x, y, rw_w, rw_h);
                     ctx2.drawImage(rw,x, y+rw_h, rw_w, rw_h);
                     ctx2.drawImage(lw, x, y+rw_h*2, lw_w, lw_h);
-                    segments.push(...rectangle(new dot(x,y), new dot(x+rw_w,y),new dot(x,y+rw_h*3), new dot(x+rw_w,y+rw_h*3)));
+                    segments.push(...rectangle(new dot(x,y), new dot(x+rw_w,y), new dot(x+rw_w,y+rw_h*3),new dot(x,y+rw_h*3)));
                 }
                 if(maze[i][j].l==1&&n==0){
                     let x = s.x+j*tab;
                     let y = s.y+(i+1)*tab-lw_h/2;
                     ctx2.drawImage(lw, x, y, lw_w, lw_h);
                     ctx2.drawImage(lw, x+lw_w, y, lw_w, lw_h);
-                    segments.push(...rectangle(new dot(x,y), new dot(x+lw_w*2,y),new dot(x,y+lw_h), new dot(x+lw_w*2,y+lw_h)));
+                    segments.push(...rectangle(new dot(x,y), new dot(x+lw_w*2,y), new dot(x+lw_w*2,y+lw_h), new dot(x,y+lw_h)));
                 }
             }
         }
@@ -566,19 +565,16 @@ lw.onload = function(){
 function draw(dT){
     if(!lasTdT) lasTdT = dT;
     if(dT-lasTdT > 32 && !PAUSE){
+    	lasTdT = dT;
+
     	window.scrollTo(0, player.y-winH/2);
         Vfield();
-        //floor fill
-        ctx.clearRect(0,0,w,h);
+		//floor fill
         ctx.fillStyle = floorPat;//floorCol;
         ctx.beginPath();
         ctx.rect(s.x,s.y,width*tab,height*tab);
-        ctx.fill()
+        ctx.fill();
         ctx.closePath();
-        ctx.clip(); // check performance!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        
-       
-        lasTdT = dT;
     //-------------------------------------------------------------------------draw bots
         
         //bots shadows
@@ -697,7 +693,7 @@ function draw(dT){
             shadow(i.a,i.b,vision*2);
         }
 
-        //getVisibles(segments,player);
+        // getVisibles(segments,player);
 
         for (let i of segments){
             let dist = Math.min(sqdist(player,i.a),sqdist(player,i.b));
