@@ -1,5 +1,7 @@
 //-----------------------------------------------------------------------------------------------------vars & constructors init
 const pi = Math.PI;
+const halfPi = pi/2;
+const quarterPi = pi/4;
 let canvas = document.getElementById("c");
 let ctx = canvas.getContext("2d"); // dynamic
 
@@ -11,15 +13,16 @@ const floorCol = "#555";
 const shadowCol = "#111"
 
 let w = canvas.width = canvas2.width = window.innerWidth;
-let winH = window.innerHeight;
-let h = canvas.height = canvas2.height = 2*winH;
+let winHalfH = window.innerHeight/2;
+let h = canvas.height = canvas2.height = 2*window.innerHeight;
 
 let PAUSE = false;
-const tab = 90; 
+const tab = 90;
+const halfTab = tab/2; 
 const scale = tab/128;
-const ws = scale; //wall scale
-const vision = 300; //sight radius
-const shadR = 10; //zombie shadow circle radius
+const ws = scale; // wall scale
+const vision = 500; // sight radius
+const shadR = 10; // zombie shadow circle radius
 const sqVision = vision*vision;
 let segments = []; // for shadow casting
 let shield = []; // no eyes on players back
@@ -34,10 +37,10 @@ let s = {x:tab,y:tab}; // startPoint
 let player = {
     i: 0,
     j: 0,
-    x: s.x+tab/2,
-    y: s.y+tab/2,
+    x: s.x+halfTab,
+    y: s.y+halfTab,
     step: 4,
-    life: 2,
+    life: 3,
     shoots: false,
     HIT: null,
     hit(){
@@ -65,8 +68,12 @@ let player = {
         }
     },
     gotHit(){
-        for(let bot of bots){
-            if(bot.attacks()) return true;
+    	let self = this;
+        for(let z of zombHit){
+            if(z.j+z.speed >= z.mid && z.j <= z.mid){
+            	self.life--;
+            	return true; // punch frame (10th)
+            } 
         }
         return false;
     },
@@ -76,7 +83,7 @@ let player = {
         return false;
     },
 };
-function bot(i,j,x,y,dir=0,step=3){// default dir & step
+function bot(i,j,x,y,dir=0,step=4){// default dir & step
     this.i = i;
     this.j = j;
     this.x = x;
@@ -88,7 +95,7 @@ function bot(i,j,x,y,dir=0,step=3){// default dir & step
     this.dead = false;
     this.attacks = function (){
         let self = this;
-        return field[self.i][self.j].dist == 1;
+        return field[self.i][self.j].dist <= 1;
     };
     this.rotSteps = function(){
         let self = this;
@@ -114,9 +121,9 @@ function tile(dist,dir){ // vector field units
     this.dist = dist;
     this.dir = dir;
 };
-let bot1 = new bot(0, width-1, s.x+(width-1)*tab+tab/2, s.y+tab/2);
-let bot2 = new bot(height-1, 0, s.x+tab/2, s.y+(height-1)*tab+tab/2);
-let bot3 = new bot(height-1, width-1, s.x+(width-1)*tab+tab/2, s.y+(height-1)*tab+tab/2);
+let bot1 = new bot(0, width-1, s.x+(width-1)*tab+halfTab, s.y+halfTab);
+let bot2 = new bot(height-1, 0, s.x+halfTab, s.y+(height-1)*tab+halfTab);
+let bot3 = new bot(height-1, width-1, s.x+(width-1)*tab+halfTab, s.y+(height-1)*tab+halfTab);
 let bots = [bot1,bot2,bot3];
 
 let maze = []; // for storing rows
@@ -131,10 +138,14 @@ function sprite (sptiteSheet, n, speed=1, scaler=1){
     let that = {};
     
     that.img = sptiteSheet;
+    that.mid = ~~(n/2);
+    that.speed = speed;
     that.width = sptiteSheet.width/n;
     that.height = sptiteSheet.height;
     that.w = that.width*scale*scaler;
     that.h = that.height*scale*scaler;
+    that.halfW = that.w/2;
+    that.halfH = that.h/2;
     that.i = 0;
     that.j = 0;
     that.inProgress = function(){
@@ -149,7 +160,7 @@ function sprite (sptiteSheet, n, speed=1, scaler=1){
     };
     
     that.render = function (){
-        that.i %= n;
+    	that.i %= n;
         ctx.drawImage(
             that.img,
             that.i*that.width,
@@ -159,14 +170,16 @@ function sprite (sptiteSheet, n, speed=1, scaler=1){
             0,
             0,
             that.w,
-            that.h);
+            that.h
+        );
         that.j += speed;
         that.i = ~~that.j;
+        that.j %= n;
     };
     return that;
 };
 //sprite mechanism initializing
-let walk, idle, zombWalk = [], zombHit = [], shot, gotHit, zombDeath = [];
+let walk, idle, shot, gotHit, death, zombWalk = [], zombIdle = [], zombHit = [], zombDeath = [];
 let temp1 = new Image();
 temp1.src = "sprites/player_walk.png";
 temp1.onload = function(){walk = sprite(temp1, 12, 0.6);}
@@ -177,7 +190,7 @@ let temp4 = new Image();
 temp4.src = "sprites/zombie1_walk.png";
 temp4.onload = function(){
     for(let i=0;i<3;i++)
-        zombWalk[i] = sprite(temp4, 20);
+        zombWalk[i] = sprite(temp4, 20,1.2);
 }
 let temp5 = new Image();
 temp5.src = "sprites/zombie1_hit.png";
@@ -197,6 +210,15 @@ temp8.onload = function(){
     for(let i=0;i<3;i++)
         zombDeath[i] = sprite(temp8, 19, 0.4);
 }
+let temp9 = new Image();
+temp9.src = "sprites/player_death.png";
+temp9.onload = function(){death = sprite(temp9, 27, 0.5);}
+temp10 = new Image();
+temp10.src = "sprites/zombie1_idle.png";
+temp10.onload = function(){
+    for(let i=0;i<3;i++)
+        zombIdle[i] = sprite(temp10, 36, 0.8);
+}
 let floor = new Image();
 floor.src = "sprites/floor.jpg";
 let floorPat; 
@@ -205,6 +227,8 @@ let rw = new Image();
 rw.src = "sprites/right_wall.jpg";
 let lw = new Image();
 lw.src = "sprites/lower_wall.jpg";
+let heart = new Image();
+heart.src = "sprites/heart.png";
 
 let lasTdT = null;
 let cursor={
@@ -218,6 +242,10 @@ function dot(x,y){
 function segment(a,b){
     this.a = a;
     this.b = b;
+    this.concat = function(seg){
+    	let self = this;
+    	self.b = seg.b;
+    };
 }
 let go = {
     Dn : tab,
@@ -235,23 +263,29 @@ let dir = {
         this.x = cursor.x - player.x;
         sqmod(this) > walk.h*walk.h/4 && (this.angle = Math.atan2(this.y,this.x));
         
-        if(this.angle < pi/4 && this.angle > -pi/4)
+        if(this.angle < quarterPi && this.angle > -quarterPi)
             this.right = true;
-        else if(this.angle < 3*pi/4 && this.angle > pi/4)
+        else if(this.angle < 3*quarterPi && this.angle > quarterPi)
             this.down = true;
-        else if(this.angle < -pi/4 && this.angle > -3*pi/4)
+        else if(this.angle < -quarterPi && this.angle > -3*quarterPi)
             this.up = true;
-        else if(this.angle < -3*pi/4 || this.angle > 3*pi/4)
+        else if(this.angle < -3*quarterPi || this.angle > 3*quarterPi)
             this.left = true;
     }
 };
 
 //-----------------------------------------------------------------------------------------------------functions initialization
+function noBot(i,j){
+	for(let bot of bots){
+		if(bot.i==i && bot.j==j) return false;
+	}
+	return true;
+}
 function rectangle(a,b,c,d){ // use with spread ...
     let temp = [];
     temp.push(new segment(a,b));
     temp.push(new segment(b,c));
-    temp.push(new segment(c,d));
+    temp.push(new segment(d,c));
     temp.push(new segment(a,d));
     return temp;
 }
@@ -321,12 +355,12 @@ function dirToArc(dir){
         case 1:
             return pi;
         case 2 :
-            return 3*pi/2;
+            return 3*halfPi;
         case 0:
         case 3:
             return 0;
         case 4:
-            return pi/2;
+            return halfPi;
     }
 }
 function sqdist(a,b){
@@ -361,8 +395,8 @@ function shadow(a,b,l=vision*2,col=shadowCol){
 
 function generateShield(){
     shield = [];
-    let arc = 3*Math.PI/2;
-    let start = dir.angle + pi/4;
+    let arc = 3*halfPi;
+    let start = dir.angle + quarterPi;
     let n = 3;
     let prev = new dot(player.x + Math.cos(start)*10, player.y + Math.sin(start)*10);
     for(let i=start+arc/n, j=0; j<n; i+=arc/n,j++){
@@ -506,7 +540,7 @@ document.addEventListener("mousedown",function(e){
 document.addEventListener("mousemove",function(e){cursor.x=e.pageX;cursor.y=e.pageY;});
 document.addEventListener("keydown",function(e){
 	KEY["key"+e.keyCode]=true;
-	if(e.keyCode==119)
+	if(e.keyCode==118)
 		PAUSE=!PAUSE;
 });
 document.addEventListener("keyup",function(e){KEY["key"+e.keyCode]=false;});
@@ -553,21 +587,21 @@ lw.onload = function(){
                 }
             }
         }
+    // minimize segments amount
+    segments = segments.filter(I => 
+    	segments.some(l=> JSON.stringify(l.a)== JSON.stringify(I.a)&& JSON.stringify(l.b)!= JSON.stringify(I.b)) // js magic! 'I' and 'l' resemble segments the most! Don't they?
+    	&&segments.some(l=> JSON.stringify(l.b)== JSON.stringify(I.a))
+    	&&segments.some(l=> JSON.stringify(l.a)== JSON.stringify(I.b))
+    	&&segments.some(l=> JSON.stringify(l.b)== JSON.stringify(I.b)&& JSON.stringify(l.a)!= JSON.stringify(I.a))
+    );
 }
-//store maze as wall segments
-/* for(let i=0;i<height;i++){
-    for(let j=0;j<width;j++){
-        if(maze[i][j].r==1) segments.push(new segment(new dot(s.x+(j+1)*tab, s.y+i*tab), new dot(s.x+(j+1)*tab, s.y+(i+1)*tab)));
-        if(maze[i][j].l==1) segments.push(new segment(new dot(s.x+j*tab, s.y+(i+1)*tab), new dot(s.x+(j+1)*tab, s.y+(i+1)*tab)));
-    }
-} */
 //----------------------------------------------------------------------------------------------------------------------------------game loop
 function draw(dT){
     if(!lasTdT) lasTdT = dT;
     if(dT-lasTdT > 32 && !PAUSE){
     	lasTdT = dT;
 
-    	window.scrollTo(0, player.y-winH/2);
+    	window.scrollTo(0, player.y-winHalfH);
         Vfield();
 		//floor fill
         ctx.fillStyle = floorPat;//floorCol;
@@ -578,24 +612,25 @@ function draw(dT){
     //-------------------------------------------------------------------------draw bots
         
         //bots shadows
-        for (let i in bots){
-            if(sqdist(player,bots[i]) < sqVision){
-                ctx.beginPath();
-                ctx.arc(bots[i].x,bots[i].y,shadR*1.3,0,pi*2);
-                ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                ctx.fill();
-                ctx.closePath();
-                let a = new dot(bots[i].x-shadR,bots[i].y-shadR);
-                let b = new dot(bots[i].x+shadR,bots[i].y-shadR);
-                let c = new dot(bots[i].x+shadR,bots[i].y+shadR);
-                let d = new dot(bots[i].x-shadR,bots[i].y+shadR);
-                let temp = rectangle(a,b,c,d);
-                for (let j of temp){
-                    shadow(j.a,j.b,vision*2,'rgba(0,0,0,0.2)');
-                }
-            }
-                
-        }
+        if(!death.terminated()){
+	        for (let i in bots){
+	            if(sqdist(player,bots[i]) < sqVision){
+	                ctx.beginPath();
+	                ctx.arc(bots[i].x,bots[i].y,shadR*1.3,0,pi*2);
+	                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+	                ctx.fill();
+	                ctx.closePath();
+	                let a = new dot(bots[i].x-shadR,bots[i].y-shadR);
+	                let b = new dot(bots[i].x+shadR,bots[i].y-shadR);
+	                let c = new dot(bots[i].x+shadR,bots[i].y+shadR);
+	                let d = new dot(bots[i].x-shadR,bots[i].y+shadR);
+	                let temp = rectangle(a,b,c,d);
+	                for (let j of temp){
+	                    shadow(j.a,j.b,vision*2,'rgba(0,0,0,0.2)');
+	                }
+	            }
+	        }
+  		}
         
         for(let i in bots){
             ctx.save();
@@ -609,120 +644,136 @@ function draw(dT){
                 ctx.rotate(dirToArc(bots[i].dir));
             }
             
-            
-            if(player.HIT == i || zombDeath[i].inProgress()){
-                bots[i].dead = true;
-                ctx.translate(-zombDeath[i].w/2,-zombDeath[i].h/2);
-                zombDeath[i].render();
-                player.HIT = null;
-            }
-            else if(bots[i].attacks()){
-                ctx.translate(-zombHit[i].w/2,-zombHit[i].h/2);
-                zombHit[i].render();
-            }
-            else{
-                ctx.translate(-zombWalk[i].w/2,-zombWalk[i].h/2);
-                zombWalk[i].render();
-            }
-            if(zombDeath[i].terminated()){ // respawn if dead
-                bots[i] = new bot(0, width-1, s.x+(width-1)*tab+tab/2, s.y+tab/2);
-                zombDeath[i].terminate();
-            }
+            if(!death.inProgress() && !death.terminated()){
+	            if(player.HIT == i || zombDeath[i].inProgress()){
+	                bots[i].dead = true;
+	                ctx.translate(-zombDeath[i].halfW,-zombDeath[i].halfH);
+	                zombDeath[i].render();
+	                player.HIT = null;
+	            }
+	            else if(bots[i].attacks()){
+	                ctx.translate(-zombHit[i].halfW,-zombHit[i].halfH);
+	                zombHit[i].render();
+	            }
+	            else{
+	                ctx.translate(-zombWalk[i].halfW,-zombWalk[i].halfH);
+	                zombWalk[i].render();
+	            }
+	            if(zombDeath[i].terminated()){ // respawn if dead
+	                bots[i] = new bot(0, width-1, s.x+(width-1)*tab+halfTab, s.y+halfTab);
+	                zombDeath[i].terminate();
+	            }
+	        }
+	        else{
+	        	ctx.translate(-zombIdle[i].halfW,-zombIdle[i].halfH);
+	            zombIdle[i].render();
+	        }
             ctx.restore();
         }
-    //-----------------------------------------------------------------------move player & bots
-        if(KEY.key87 &&  dir.right && maze[player.i][player.j].r!=1 && go.Rt>=tab && go.Dn>=tab && go.Up>=tab) go.Rt-=tab;
-        if(KEY.key87 &&  dir.up && player.i>0 && maze[player.i-1][player.j].l!=1 && go.Up>=tab && go.Rt>=tab && go.Lt>=tab) go.Up-=tab;
-        if(KEY.key87 &&  dir.down && maze[player.i][player.j].l!=1 && go.Dn>=tab && go.Rt>=tab && go.Lt>=tab) go.Dn-=tab;
-        if(KEY.key87 &&  dir.left && player.j>0 && maze[player.i][player.j-1].r!=1 && go.Lt>=tab && go.Dn>=tab && go.Up>=tab) go.Lt-=tab;
-        if(go.Rt < tab){
-            player.x+=player.step;
-            go.Rt+=player.step;
-            if(go.Rt >= tab ) player.j++;
-        }
-        if(go.Lt < tab){
-            player.x-=player.step;
-            go.Lt+=player.step;
-            if(go.Lt >= tab) player.j--;
-        }
-        if(go.Up < tab){
-            player.y-=player.step;
-            go.Up+=player.step;
-            if(go.Up >= tab) player.i--;
-        }
-         if(go.Dn < tab){
-            player.y+=player.step;
-            go.Dn+=player.step;
-            if(go.Dn >= tab) player.i++;
-        }
-	
-        for (let bot of bots){
-            if(!bot.dead && !bot.attacks()){
-                if(field[bot.i][bot.j].dir==1 ){ bot.dir=1; } 
-                    
-                else if(field[bot.i][bot.j].dir==2){ bot.dir=2; } 
-                    
-                else if(field[bot.i][bot.j].dir==3){ bot.dir=3; } 
-                    
-                else if(field[bot.i][bot.j].dir==4){ bot.dir=4;} 
-                    
-                if(bot.dir==1){
-                   bot.x-=bot.step;
-                    if(tab/2+s.x+(bot.j)*tab - bot.x>=tab){ bot.j--; }
-                }
-                else if(bot.dir==2){
-                    bot.y-=bot.step;
-                    if(tab/2+s.y+(bot.i)*tab - bot.y>=tab){ bot.i--; }
-                }
-                else if(bot.dir==3){
-                    bot.x+=bot.step;
-                    if(bot.x - s.x-bot.j*tab-tab/2>=tab){bot.j++; }
-                }
-                else if(bot.dir==4){
-                    bot.y+=bot.step;
-                    if(bot.y - s.x-bot.i*tab-tab/2>=tab) { bot.i++; }
-                }
-            }
-        }
+    //---------------------------------------------------------------------------------------------------------------------move player & bots
+        if(!death.inProgress() && !death.terminated()){
+	        if(KEY.key87 &&  dir.right && noBot(player.i,player.j+1) 
+	        	&& maze[player.i][player.j].r!=1 && go.Rt>=tab && go.Dn>=tab && go.Up>=tab) go.Rt-=tab;
+	        if(KEY.key87 &&  dir.up && player.i>0 && noBot(player.i-1,player.j) 
+	        	&& maze[player.i-1][player.j].l!=1 && go.Up>=tab && go.Rt>=tab && go.Lt>=tab) go.Up-=tab;
+	        if(KEY.key87 &&  dir.down && noBot(player.i+1,player.j) 
+	        	&& maze[player.i][player.j].l!=1 && go.Dn>=tab && go.Rt>=tab && go.Lt>=tab) go.Dn-=tab;
+	        if(KEY.key87 &&  dir.left && player.j>0 && noBot(player.i,player.j-1) 
+	        	&& maze[player.i][player.j-1].r!=1 && go.Lt>=tab && go.Dn>=tab && go.Up>=tab) go.Lt-=tab;
+	        if(go.Rt < tab){
+	            player.x+=player.step;
+	            go.Rt+=player.step;
+	            if(go.Rt >= tab ) player.j++;
+	        }
+	        if(go.Lt < tab){
+	            player.x-=player.step;
+	            go.Lt+=player.step;
+	            if(go.Lt >= tab) player.j--;
+	        }
+	        if(go.Up < tab){
+	            player.y-=player.step;
+	            go.Up+=player.step;
+	            if(go.Up >= tab) player.i--;
+	        }
+	         if(go.Dn < tab){
+	            player.y+=player.step;
+	            go.Dn+=player.step;
+	            if(go.Dn >= tab) player.i++;
+	        }
+	        for (let bot of bots){
+				if(field[bot.i][bot.j].dir==1 ){ bot.dir=1; } 
+	            else if(field[bot.i][bot.j].dir==2){ bot.dir=2; } 
+	            else if(field[bot.i][bot.j].dir==3){ bot.dir=3; } 
+	            else if(field[bot.i][bot.j].dir==4){ bot.dir=4;} 
+				if(!bot.dead && !bot.attacks()){                    
+	                if(bot.dir==1){
+	                   bot.x-=bot.step;
+	                    if(halfTab+s.x+(bot.j)*tab - bot.x>=tab){ bot.j--; }
+	                }
+	                else if(bot.dir==2){
+	                    bot.y-=bot.step;
+	                    if(halfTab+s.y+(bot.i)*tab - bot.y>=tab){ bot.i--; }
+	                }
+	                else if(bot.dir==3){
+	                    bot.x+=bot.step;
+	                    if(bot.x - s.x-bot.j*tab-halfTab>=tab){bot.j++; }
+	                }
+	                else if(bot.dir==4){
+	                    bot.y+=bot.step;
+	                    if(bot.y - s.x-bot.i*tab-halfTab>=tab) { bot.i++; }
+	                }
+	            }
+	        }
+	    }
         //--------------------------------------------------------------------draw player
-        
-        //cast shadows underneath player
-        
-        generateShield();// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        for (let i of shield){
-            shadow(i.a,i.b,vision*2);
-        }
 
-        // getVisibles(segments,player);
-
-        for (let i of segments){
-            let dist = Math.min(sqdist(player,i.a),sqdist(player,i.b));
-            if(dist < sqVision)
-                shadow(i.a,i.b,vision*2);
-        }
+        // cast shadows underneath player
+        if(!death.terminated()){
+	        generateShield();// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+	        for (let i of shield){
+	            shadow(i.a,i.b,vision*2);
+	        }
+	    	// getVisibles(segments,player);
+			for (let i of segments){
+	            let dist = Math.min(sqdist(player,i.a),sqdist(player,i.b));
+	            if(dist < sqVision)
+	                shadow(i.a,i.b,vision*2);
+	        }
+	        // draw vision area
+	        ctx.beginPath();
+	        ctx.arc(player.x,player.y,vision,0,pi*2);
+	        ctx.rect(s.x+width*tab,s.y,-width*tab,height*tab);
+	        ctx.fillStyle = shadowCol;
+	        ctx.fill();
+	        ctx.closePath();
+	        
+	        ctx.save();
+	        ctx.translate(player.x,player.y);
+	        ctx.rotate(dir.angle);
+	    }
         
-        
-        // draw vision area
-        ctx.beginPath();
-        ctx.arc(player.x,player.y,vision,0,pi*2);
-        ctx.rect(s.x+width*tab,s.y,-width*tab,height*tab);
-        ctx.fillStyle = shadowCol;
-        ctx.fill();
-        ctx.closePath();
-        
-        ctx.save();
-        ctx.translate(player.x,player.y);
-        ctx.rotate(dir.angle);
-        
-        if(player.moves()){ctx.translate(-walk.w/2,-walk.h/2); walk.render();gotHit.terminate();}
-        else if(player.shoots){ctx.translate(-shot.w/2,-shot.h/2);shot.render();gotHit.terminate();}
-        else if (player.gotHit() || gotHit.inProgress()){ctx.translate(-gotHit.w/2,-gotHit.h/2);gotHit.render();}
-        else {ctx.translate(-idle.w/2,-idle.h/2); idle.render();gotHit.terminate();} 
+        if(player.life <= 0){
+        	if(!death.terminated()){
+	        	ctx.translate(-death.halfW,-death.halfH);
+	        	death.render();
+	        }
+        	else
+        		setTimeout(function(){location.reload();},3000);
+        } 
+        else if (player.gotHit() || gotHit.inProgress()){ctx.translate(-gotHit.halfW,-gotHit.halfH);gotHit.render();}
+        else if(player.moves()){ctx.translate(-walk.halfW,-walk.halfH); walk.render();gotHit.terminate();}
+        else if(player.shoots){ctx.translate(-shot.halfW,-shot.halfH);shot.render();gotHit.terminate();}
+        else {ctx.translate(-idle.halfW,-idle.halfH); idle.render();gotHit.terminate();} 
         if(shot.terminated()){ player.shoots=false; shot.terminate();}
         ctx.restore();
         dir.update();
+
+        // draw hearts
+		ctx.clearRect(0,window.scrollY,halfTab,tab*3)
+        for(let i=0;i<player.life;i++)
+        	ctx.drawImage(heart,0,window.scrollY+i*halfTab,halfTab,halfTab);
        
     }
     requestAnimationFrame(draw);
 }
-requestAnimationFrame(draw);
+setTimeout(draw,1000);
