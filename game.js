@@ -18,6 +18,7 @@ let h = canvas.height = canvas2.height = 2*window.innerHeight;
 
 let PAUSE = false;
 const tab = 90;
+const eps = tab/18;
 const halfTab = tab/2; 
 const scale = tab/128;
 const ws = scale; // wall scale
@@ -247,6 +248,18 @@ function segment(a,b){
     	let self = this;
     	self.b = seg.b;
     };
+    this.prolongs = function(s){
+    	let self = this;
+    	if(epsEq(s.b.y, self.a.y) && epsEq(s.b.x, self.a.x)){
+			if(epsEq(s.a.x, s.b.x))
+				if(epsEq(self.a.x, self.b.x))
+						return true;
+			if(epsEq(s.a.y, s.b.y))
+				if(epsEq(self.a.y, self.b.y))
+						return true;	
+		}
+		return false;
+	}
 }
 let go = {
     Dn : tab,
@@ -282,6 +295,9 @@ function noBot(i,j){
 		if(bot.i==i && bot.j==j) return false;
 	}
 	return true;
+}
+function epsEq(a,b){
+	return Math.abs(a-b) < eps;
 }
 function rectangle(a,b,c,d){ // use with spread ...
     let temp = [];
@@ -347,6 +363,9 @@ function segRay(seg,ray){
         } 
     }
     return null;
+}
+function newSegRay(seg,ray){
+
 }
 function mod360(x){
     if(x<0) return x+=pi*2;
@@ -633,33 +652,20 @@ lw.onload = function(){
                 }
             }
         }
-    // minimize segments amount; js magic! 'I' and 'l' resemble segments the most! Don't they?
-   /* let inter;
-    for (let seg of segments){
-    	if(seg.a.x<s.x+rw_w/2) seg.a.x = s.x+rw_w/2;
 
-    	if(seg.a.y<s.y) seg.a.y = s.y;
-    	if(seg.b.y>s.y+height*tab-lw_h/2) seg.b.y = s.y+height*tab-lw_h/2;
-    	
-    	// if(seg.a.x==seg.b.x){
-    	// 	inter = segments.find(I=>seg.a.x==I.a.x&&between(I.a.y,seg.a.y,I.b.y))
-    	// 	if(inter) seg.a.y = inter.b.y;
-    	// 	inter = segments.find(I=>seg.a.x==I.a.x&&between(I.a.y,seg.b.y,I.b.y))
-    	// 	if(inter) seg.b.y = inter.a.y;
-    	// }
-    	// else{
-    	// 	inter = segments.find(I=>seg.a.y==I.a.y&&between(I.a.x,seg.a.x,I.b.x))
-    	// 	if(inter) seg.a.x = inter.b.x;
-    	// 	inter = segments.find(I=>seg.a.y==I.a.y&&between(I.a.x,seg.b.x,I.b.x))
-    	// 	if(inter) seg.b.x = inter.a.x;
-    	// }
-    }*/
-    /*filtered = segments.filter(I => 
-    	segments.some(l=> obj(l.a)== obj(I.a)&& obj(l.b)!= obj(I.b))
-    	&&segments.some(l=> obj(l.b)== obj(I.a))
-    	&&segments.some(l=> obj(l.a)== obj(I.b))
-    	&&segments.some(l=> obj(l.b)== obj(I.b)&& obj(l.a)!= obj(I.a))
-    );*/
+   for(let i=0; i<segments.length; i++){
+    	if(segments[i]){
+	    	for(let j=0; j<segments.length; j++){
+	    		if(segments[j] && segments[j].prolongs(segments[i])){
+	    			segments[i].concat(segments[j]);
+	    			segments[j] = null;
+	    			j = -1;
+	    		}
+	    	}
+	    }
+    }
+    segments = segments.filter(I => I);
+    
     // eventually proper visual debugging
     ctx2.strokeStyle = '#f00';
     ctx2.fillStyle = '#0f0';
@@ -692,6 +698,9 @@ lw.onload = function(){
     		ctx2.closePath();
     	}
 	);
+	for(let y=s.y-rw_h/2;y<s.y-rw_h/2+height*rw_h*3;y+=rw_h){
+		ctx2.fillText(y+'',0,y)
+	}	
 }
 //----------------------------------------------------------------------------------------------------------------------------------game loop
 function draw(dT){
