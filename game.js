@@ -25,6 +25,7 @@ const vision = 500; // sight radius
 const shadR = 10; // zombie shadow circle radius
 const sqVision = vision*vision;
 let segments = []; // for shadow casting
+let filtered = [];
 let shield = []; // no eyes on players back
 let field = []; // for vfield generator
 
@@ -275,6 +276,7 @@ let dir = {
 };
 
 //-----------------------------------------------------------------------------------------------------functions initialization
+let obj = JSON.stringify;
 function noBot(i,j){
 	for(let bot of bots){
 		if(bot.i==i && bot.j==j) return false;
@@ -554,6 +556,8 @@ document.addEventListener("touchend",function(e){
 lw.onload = function(){
     let lw_w = lw.width*ws, lw_h = lw.height*ws;
     let rw_w = rw.width*ws, rw_h = rw.height*ws;
+    let pad1 = 0, pad2 = 0, pad3 = 0, pad4 = 0;
+    let pad5 = 0, pad6 = 0, pad7 = 0, pad8 = 0;
     for(let n=0;n<2;n++)
         for(let i=0;i<height;i++){
             for(let j=0;j<width;j++){
@@ -576,24 +580,118 @@ lw.onload = function(){
                     ctx2.drawImage(rw, x, y, rw_w, rw_h);
                     ctx2.drawImage(rw,x, y+rw_h, rw_w, rw_h);
                     ctx2.drawImage(lw, x, y+rw_h*2, lw_w, lw_h);
-                    segments.push(...rectangle(new dot(x,y), new dot(x+rw_w,y), new dot(x+rw_w,y+rw_h*3),new dot(x,y+rw_h*3)));
+                    if(j<width-1){
+                    	pad3 = pad4 = pad5 = pad6 = pad7 = pad8 = 0;
+                    	if(i==0||maze[i-1][j].r==1){
+                    		pad3 = lw_h;
+                    	}
+                    	if(i==height-1){
+                    		pad4 = lw_h;
+                    	}
+                    	if(!pad3&&i>0&&maze[i-1][j].l){
+                    		pad5 = lw_h;
+                    	}
+                    	if(i+1<height&&maze[i][j].l){
+                    		pad6 = lw_h;
+                    	}
+                    	if(!pad3&&i>0&&maze[i-1][j+1].l){
+                    		pad7 = lw_h;
+                    	}
+                    	if(i+1<height&&maze[i][j+1].l){
+                    		pad8 = lw_h;
+                    	} 
+                    	segments.push(new segment(new dot(x,y+pad3+pad5), new dot(x,y+rw_h*3-pad4-pad6)));
+                    	segments.push(new segment(new dot(x+rw_w,y+pad3+pad7), new dot(x+rw_w,y+rw_h*3-pad4-pad8)));
+                    	if(i>0&&!maze[i-1][j].r){
+                    		segments.push(new segment(new dot(x,y), new dot(x+rw_w,y)));
+                    	}
+                    	if(i+1<height&&!maze[i+1][j].r){
+                    		segments.push(new segment(new dot(x,y+rw_h*3), new dot(x+rw_w,y+rw_h*3)));
+                    	}
+                    }
                 }
                 if(maze[i][j].l==1&&n==0){
                     let x = s.x+j*tab;
                     let y = s.y+(i+1)*tab-lw_h/2;
                     ctx2.drawImage(lw, x, y, lw_w, lw_h);
                     ctx2.drawImage(lw, x+lw_w, y, lw_w, lw_h);
-                    segments.push(...rectangle(new dot(x,y), new dot(x+lw_w*2,y), new dot(x+lw_w*2,y+lw_h), new dot(x,y+lw_h)));
+                    if(i<height-1){
+                    	pad1 = pad2 = 0;
+	                    if(maze[i][j].r==1||i+1<height&&maze[i+1][j].r==1){
+	                    	pad1 = rw_w/2;
+	                    } 
+	                    if(j==0||(maze[i][j-1].r==1||i+1<height&&maze[i+1][j-1].r==1)){
+	                    	pad2 = rw_w/2;
+	                    } 
+	                    segments.push(new segment(new dot(x+pad2,y), new dot(x-pad1+lw_w*2,y)));
+	                    segments.push(new segment(new dot(x+pad2,y+lw_h), new dot(x-pad1+lw_w*2,y+lw_h)));
+	                    if(!pad1&&j+1<width&&!maze[i][j+1].l)
+	                    	segments.push(new segment(new dot(x+lw_w*2,y), new dot(x+lw_w*2,y+lw_h)))
+	                    if(!pad2&&j>0&&!maze[i][j-1].l)
+	                    	segments.push(new segment(new dot(x,y), new dot(x,y+lw_h)))
+	                }
                 }
             }
         }
-    // minimize segments amount
-    segments = segments.filter(I => 
-    	segments.some(l=> JSON.stringify(l.a)== JSON.stringify(I.a)&& JSON.stringify(l.b)!= JSON.stringify(I.b)) // js magic! 'I' and 'l' resemble segments the most! Don't they?
-    	&&segments.some(l=> JSON.stringify(l.b)== JSON.stringify(I.a))
-    	&&segments.some(l=> JSON.stringify(l.a)== JSON.stringify(I.b))
-    	&&segments.some(l=> JSON.stringify(l.b)== JSON.stringify(I.b)&& JSON.stringify(l.a)!= JSON.stringify(I.a))
-    );
+    // minimize segments amount; js magic! 'I' and 'l' resemble segments the most! Don't they?
+   /* let inter;
+    for (let seg of segments){
+    	if(seg.a.x<s.x+rw_w/2) seg.a.x = s.x+rw_w/2;
+
+    	if(seg.a.y<s.y) seg.a.y = s.y;
+    	if(seg.b.y>s.y+height*tab-lw_h/2) seg.b.y = s.y+height*tab-lw_h/2;
+    	
+    	// if(seg.a.x==seg.b.x){
+    	// 	inter = segments.find(I=>seg.a.x==I.a.x&&between(I.a.y,seg.a.y,I.b.y))
+    	// 	if(inter) seg.a.y = inter.b.y;
+    	// 	inter = segments.find(I=>seg.a.x==I.a.x&&between(I.a.y,seg.b.y,I.b.y))
+    	// 	if(inter) seg.b.y = inter.a.y;
+    	// }
+    	// else{
+    	// 	inter = segments.find(I=>seg.a.y==I.a.y&&between(I.a.x,seg.a.x,I.b.x))
+    	// 	if(inter) seg.a.x = inter.b.x;
+    	// 	inter = segments.find(I=>seg.a.y==I.a.y&&between(I.a.x,seg.b.x,I.b.x))
+    	// 	if(inter) seg.b.x = inter.a.x;
+    	// }
+    }*/
+    /*filtered = segments.filter(I => 
+    	segments.some(l=> obj(l.a)== obj(I.a)&& obj(l.b)!= obj(I.b))
+    	&&segments.some(l=> obj(l.b)== obj(I.a))
+    	&&segments.some(l=> obj(l.a)== obj(I.b))
+    	&&segments.some(l=> obj(l.b)== obj(I.b)&& obj(l.a)!= obj(I.a))
+    );*/
+    // eventually proper visual debugging
+    ctx2.strokeStyle = '#f00';
+    ctx2.fillStyle = '#0f0';
+    ctx2.lineWidth = 2;
+    segments.map(I => {
+    		ctx2.beginPath();
+    		ctx2.moveTo(I.a.x,I.a.y);
+    		ctx2.lineTo(I.b.x,I.b.y);
+    		ctx2.stroke();
+    		ctx2.closePath();
+    	}
+	);
+	ctx2.strokeStyle = '#00f';
+	filtered.map(I => {
+    		ctx2.beginPath();
+    		ctx2.moveTo(I.a.x,I.a.y);
+    		ctx2.lineTo(I.b.x,I.b.y);
+    		ctx2.stroke();
+    		ctx2.closePath();
+    	}
+	);
+	segments.map(I => {
+    		ctx2.beginPath();
+    		ctx2.arc(I.a.x,I.a.y,2,0,pi*2);
+    		ctx2.fill();
+    		ctx2.closePath();
+    		ctx2.beginPath();
+    		ctx2.arc(I.b.x,I.b.y,2,0,pi*2);
+    		ctx2.fill();
+    		ctx2.closePath();
+    	}
+	);
 }
 //----------------------------------------------------------------------------------------------------------------------------------game loop
 function draw(dT){
@@ -729,7 +827,7 @@ function draw(dT){
 
         // cast shadows underneath player
         if(!death.terminated()){
-	        generateShield();// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+	        generateShield();
 	        for (let i of shield){
 	            shadow(i.a,i.b,vision*2);
 	        }
