@@ -12,9 +12,9 @@ let canvas3 = document.getElementById("c3");
 let ctx3 = canvas3.getContext("2d"); // for debugging
 
 //colors
-canvas.style.backgroundColor = "#111"; //around maze fill
+canvas.style.backgroundColor = "#000"; //around maze fill
 const floorCol = "#555";
-const shadowCol = "#111"
+const shadowCol = "#000"
 
 let w = canvas.width = canvas2.width = canvas3.width = window.innerWidth;
 let winHalfH = window.innerHeight/2;
@@ -26,7 +26,7 @@ const eps = tab/18;
 const halfTab = tab/2; 
 const scale = tab/128;
 const ws = scale; // wall scale
-const vision = 500; // sight radius
+const vision = 300; // sight radius
 const shadR = 10; // zombie shadow circle radius
 const sqVision = vision*vision;
 let segments = []; // for shadow casting
@@ -35,6 +35,7 @@ let field = []; // for vfield generator
 
 let width = ~~((w-tab*2)/tab); // maze size params
 let height = ~~((h-tab*2)/tab);
+let eye1,eye2;
 
 let temp;
 let s = {x:tab,y:tab}; // startPoint
@@ -278,7 +279,7 @@ let dir = {
         }
         this.y = cursor.y - player.y;
         this.x = cursor.x - player.x;
-        sqmod(this) > walk.h*walk.h/4 && (this.angle = Math.atan2(this.y,this.x));
+        this.angle = Math.atan2(this.y,this.x);
         
         if(this.angle < quarterPi && this.angle > -quarterPi)
             this.right = true;
@@ -388,19 +389,19 @@ function sqdist(a,b){
 function sqmod(a){
     return a.x*a.x + a.y*a.y;
 }
-function shadow(a,b,col=shadowCol){ 
+function shadow(a,b,col=shadowCol,source=player){ 
 	/*let a1 = {x: a.x-b.x, y: a.y-b.y};
 	let len = Math.sqrt(sqmod(a1));
 	let aNew = {x: a.x+a1.x/len, y:a.y+a1.y/len};
 	let bNew = {x: b.x-a1.x/len, y:b.y-a1.y/len};
 	a=aNew;b=bNew;*/
-	let l1=Math.sqrt(sqdist(a,player));
-	let l2=Math.sqrt(sqdist(b,player));
+	let l1=Math.sqrt(sqdist(a,source));
+	let l2=Math.sqrt(sqdist(b,source));
 	let newL1 = Math.abs(l1-vision);
 	let newL2 = Math.abs(l2-vision);
 
-	let v1 = {x:(a.x-player.x)*(newL1/l1),y:(a.y-player.y)*(newL1/l1)};
-	let v2 = {x:(b.x-player.x)*(newL2/l2),y:(b.y-player.y)*(newL2/l2)};
+	let v1 = {x:(a.x-source.x)*(newL1/l1),y:(a.y-source.y)*(newL1/l1)};
+	let v2 = {x:(b.x-source.x)*(newL2/l2),y:(b.y-source.y)*(newL2/l2)};
 
 	let vx=0,vy=0;
 	if(epsEq(a.x,b.x)){
@@ -557,7 +558,19 @@ document.addEventListener("mousedown",function(e){
     player.shoots=true; 
     player.hit();
     });
-document.addEventListener("mousemove",function(e){cursor.x=e.pageX;cursor.y=e.pageY;});
+document.addEventListener("mousemove",function(e){
+	let v = new dot(e.pageX-player.x, e.pageY-player.y);
+	let l = sqmod(v);
+	if(l < sqVision){
+		l = Math.sqrt(l);
+		cursor.x = player.x + v.x*(vision/l); 
+		cursor.y = player.y + v.y*(vision/l);
+	}
+	else {
+		cursor.x = e.pageX;
+		cursor.y = e.pageY;
+	}
+});
 document.addEventListener("keydown",function(e){
 	KEY["key"+e.keyCode]=true;
 	if(e.keyCode==118)
@@ -826,11 +839,20 @@ function draw(dT){
 
         // cast shadows underneath player
         if(!death.terminated()){
-	    	getVisibles(segments.filter(I=>Math.min(sqdist(player,I.a),sqdist(player,I.b) < sqVision)),player);
+	    	getVisibles(segments,player);
+	    	eye1 = new dot(player.x+Math.cos(dir.angle-quarterPi)*tab/9,player.y+Math.sin(dir.angle-quarterPi)*tab/9);
+	    	eye2 = new dot(player.x+Math.cos(dir.angle+quarterPi)*tab/9,player.y+Math.sin(dir.angle+quarterPi)*tab/9);
 			for (let i of visibles){
 	 			shadow(i.a,i.b);
 	        }
-	        // draw vision area
+	        
+	        for (let i of visibles){
+	 			shadow(i.a,i.b,'rgba(0,0,0,0.5)',eye1);
+	        }
+	        for (let i of visibles){
+	 			shadow(i.a,i.b,'rgba(0,0,0,0.5)',eye2);
+	        }
+	        // draw vision circle
 	        ctx.beginPath();
 	        ctx.arc(player.x,player.y,vision,0,pi*2);
 	        ctx.rect(s.x+width*tab,s.y,-width*tab,height*tab);
@@ -840,13 +862,16 @@ function draw(dT){
 	        
 	        ctx.save();
 	        ctx.translate(player.x,player.y);
-	        ctx.rotate(dir.angle-quarterPi);
-	        ctx.beginPath();
-	        ctx.rect(-vision,-vision,vision*2,vision*2);
-	        ctx.rect(vision,0,-vision,vision);
-	        ctx.fill();
-	        ctx.closePath();
-	        ctx.rotate(quarterPi);
+	        // 90 degrees sight
+	        if(!death.terminated()){
+		        ctx.rotate(dir.angle-quarterPi);
+		        ctx.beginPath();
+		        ctx.rect(-vision,-vision,vision*2,vision*2);
+		        ctx.rect(vision,0,-vision,vision);
+		        ctx.fill();
+		        ctx.closePath();
+		        ctx.rotate(quarterPi);
+		    }
 	    }
         
         if(player.life <= 0){
@@ -882,6 +907,23 @@ function draw(dT){
 	    		ctx3.closePath();
 	    	}
 		);*/
+		/*ctx3.clearRect(0,0,w,h);
+		ctx3.beginPath();
+        ctx3.arc(eye1.x,eye1.y,3,0,pi*2);
+    	ctx3.fillStyle = 'blue';
+        ctx3.fill();
+        ctx3.closePath();
+        ctx3.beginPath();
+        ctx3.arc(eye2.x,eye2.y,3,0,pi*2);
+    	ctx3.fillStyle = 'blue';
+        ctx3.fill();
+        ctx3.closePath();
+
+        ctx3.beginPath();
+        ctx3.arc(player.x+dir.x,player.y+dir.y,4,0,pi*2);
+    	ctx3.fillStyle = 'cyan';
+        ctx3.fill();
+        ctx3.closePath();*/
        
     }
     requestAnimationFrame(draw);
