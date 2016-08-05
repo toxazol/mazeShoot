@@ -880,7 +880,7 @@ function draw(dT){
 	        	death.render();
 	        }
         	else
-        		setTimeout(function(){window.location.reload(false);},3000);
+        		setTimeout(function(){document.location.reload();},3000);
         } 
         else if (player.gotHit() || gotHit.inProgress()){ctx.translate(-gotHit.halfW,-gotHit.halfH);gotHit.render();}
         else if(player.moves()){ctx.translate(-walk.halfW,-walk.halfH); walk.render();gotHit.terminate();}
