@@ -7,14 +7,18 @@ let ctx = canvas.getContext("2d"); // dynamic
 
 let canvas2 = document.getElementById("c2");
 let ctx2 = canvas2.getContext("2d"); // static
+
+let canvas3 = document.getElementById("c3");
+let ctx3 = canvas3.getContext("2d"); // for debugging
+
 //colors
 canvas.style.backgroundColor = "#111"; //around maze fill
 const floorCol = "#555";
 const shadowCol = "#111"
 
-let w = canvas.width = canvas2.width = window.innerWidth;
+let w = canvas.width = canvas2.width = canvas3.width = window.innerWidth;
 let winHalfH = window.innerHeight/2;
-let h = canvas.height = canvas2.height = 2*window.innerHeight;
+let h = canvas.height = canvas2.height = canvas3.height = 2*window.innerHeight;
 
 let PAUSE = false;
 const tab = 90;
@@ -26,7 +30,6 @@ const vision = 500; // sight radius
 const shadR = 10; // zombie shadow circle radius
 const sqVision = vision*vision;
 let segments = []; // for shadow casting
-let filtered = [];
 let shield = []; // no eyes on players back
 let field = []; // for vfield generator
 
@@ -53,9 +56,9 @@ let player = {
             let target = Math.atan2(bots[i].y-self.y,bots[i].x-self.x);
             if(mod360(mod360(target)-mod360(dir.angle)) < pi/16 || mod360(mod360(dir.angle)-mod360(target)) < pi/16){
                 let intersects = [];
-                let ray = {a: self, b: cursor};
+                let ray = new dot(cursor.x-self.x, cursor.y-self.y);
                 for (let seg of segments){
-                    let dot = segRay(seg,ray);
+                    let dot = newSegRay(seg,ray,self);
                     if(dot) intersects.push({dot:dot,seg:seg});
                 }
                 if(intersects.length){
@@ -307,65 +310,60 @@ function rectangle(a,b,c,d){ // use with spread ...
     temp.push(new segment(a,d));
     return temp;
 }
-function consistsIn(arr,seg){
+function notConsistsIn(arr,seg){ // works faster than array.some()
     for(i of arr){
-        if(i==seg) return true;
+        if(i.a==seg.a&&i.b==seg.b) return false;
     }
-    return false;
+    return true;
 }
 let visibles = [];
 function getVisibles(segments,player){
-    visibles = []; // if not in visible when add
+    visibles = [];
     let intersects = [];
-    for(let v=0;v<Math.PI*2;v+=0.01){ // try different angle increment
+    let start = dir.angle-quarterPi;
+    let finish = dir.angle+quarterPi;
+    for(let v=start;v<finish;v+=0.01){ // try different angle increment
         intersects = [];
-        ray = {a:player, b:{x:Math.cos(v)*10+player.x,y:Math.sin(v)*10+player.y,},};
+        ray = new dot(Math.cos(v), Math.sin(v));
         for(seg of segments){
-            let dot = segRay(seg,ray);
+            let dot = newSegRay(seg,ray,player);
             if(dot) intersects.push({dot:dot,seg:seg});
         }
         if(intersects.length){
-            intersects.sort(function(a,b){return sqdist(a.dot,player)-sqdist(b.dot,player);});
-            if(!consistsIn(visibles,intersects[0].seg))visibles.push(intersects[0].seg);
+            intersects.sort((a,b)=>sqdist(a.dot,player)-sqdist(b.dot,player));
+            //if(!visibles.some(o=>obj(o)==obj(intersects[0].seg)))
+            if(notConsistsIn(visibles,intersects[0].seg))
+            	visibles.push(intersects[0].seg);
         }
     }
 }
 function vecAngle(vec){
     return Math.atan2(vec.y,vec.x);
 }
-function getLineX(y,seg){
-    return (seg.b.x-seg.a.x)*((y-seg.a.y)/(seg.b.y-seg.a.y))+seg.a.x;
-}
-function getLineY(x,seg){
-    return (seg.b.y-seg.a.y)*((x-seg.a.x)/(seg.b.x-seg.a.x))+seg.a.y;
-}
 function between(a,x,b){
     if(x>a&&x<b || x>b&&x<a)return true;
     return false;
 }
-function segRay(seg,ray){ 
-    if(seg.a.x == seg.b.x){
-        let y = getLineY(seg.a.x,ray);
-        if(between(seg.a.y,y,seg.b.y)){
-            let rayVec = {x:ray.b.x-ray.a.x, y: ray.b.y-ray.a.y};
-            let segVec = {x:seg.b.x-ray.a.x, y: y-ray.a.y};
-            if(Math.abs(vecAngle(rayVec)-vecAngle(segVec)) < 1)
-                return {x:seg.a.x, y:y};
-        }
-    }
-    else{
-        let x = getLineX(seg.a.y,ray);
-        if(between(seg.a.x,x,seg.b.x)){
-            let rayVec = {x:ray.b.x-ray.a.x, y: ray.b.y-ray.a.y};
-            let segVec = {x:x-ray.a.x, y: seg.b.y-ray.a.y};
-            if(Math.abs(vecAngle(rayVec)-vecAngle(segVec)) < 1)
-                return {x:x, y:seg.a.y};
-        } 
-    }
-    return null;
-}
-function newSegRay(seg,ray){
-
+function newSegRay(seg,ray,s){
+	if(epsEq(seg.a.x, seg.b.x)){
+		let t = (seg.a.x-s.x)/ray.x;
+		if(t > 0){
+			let y = s.y+ray.y*t;
+			if(between(seg.a.y,y,seg.b.y)){
+	    		return {x:seg.a.x, y:y};
+	    	}
+		}
+	}
+	else{
+	    let t = (seg.a.y-s.y)/ray.y;
+		if(t > 0){
+			let x = s.x+ray.x*t;
+			if(between(seg.a.x,x,seg.b.x)){
+	    		return {x:x, y:seg.a.y};
+	    	}
+		}
+	}
+	return null;
 }
 function mod360(x){
     if(x<0) return x+=pi*2;
@@ -390,41 +388,42 @@ function sqdist(a,b){
 function sqmod(a){
     return a.x*a.x + a.y*a.y;
 }
-function shadow(a,b,l=vision*2,col=shadowCol){ 
-	let a1 = {x: a.x-b.x, y: a.y-b.y};
+function shadow(a,b,col=shadowCol){ 
+	/*let a1 = {x: a.x-b.x, y: a.y-b.y};
 	let len = Math.sqrt(sqmod(a1));
 	let aNew = {x: a.x+a1.x/len, y:a.y+a1.y/len};
 	let bNew = {x: b.x-a1.x/len, y:b.y-a1.y/len};
-	a=aNew;b=bNew;
+	a=aNew;b=bNew;*/
 	let l1=Math.sqrt(sqdist(a,player));
 	let l2=Math.sqrt(sqdist(b,player));
+	let newL1 = Math.abs(l1-vision);
+	let newL2 = Math.abs(l2-vision);
 
-	let v1 = {x:(a.x-player.x)*(l/l1),y:(a.y-player.y)*(l/l1)}
-	let v2 = {x:(b.x-player.x)*(l/l2),y:(b.y-player.y)*(l/l2)}
+	let v1 = {x:(a.x-player.x)*(newL1/l1),y:(a.y-player.y)*(newL1/l1)};
+	let v2 = {x:(b.x-player.x)*(newL2/l2),y:(b.y-player.y)*(newL2/l2)};
+
+	let vx=0,vy=0;
+	if(epsEq(a.x,b.x)){
+		vx = Math.sign(v1.x)*vision;
+	}
+	else
+		vy = Math.sign(v1.y)*vision;
 
 	ctx.fillStyle = col;
-	// ctx.strokeStyle = col;
+	ctx.strokeStyle = col;
 	ctx.beginPath();
 	ctx.moveTo(a.x,a.y);
-	ctx.lineTo(a.x+v1.x,a.y+v1.y);//ctx.stroke();
-	ctx.lineTo(b.x+v2.x,b.y+v2.y);//ctx.stroke();
-	ctx.lineTo(b.x,b.y);//ctx.stroke();
-	ctx.lineTo(a.x,a.y);//ctx.stroke();
-	ctx.fill();
-	//ctx.closePath();
-}
+	ctx.lineTo(a.x+v1.x,a.y+v1.y);
 
-function generateShield(){
-    shield = [];
-    let arc = 3*halfPi;
-    let start = dir.angle + quarterPi;
-    let n = 3;
-    let prev = new dot(player.x + Math.cos(start)*10, player.y + Math.sin(start)*10);
-    for(let i=start+arc/n, j=0; j<n; i+=arc/n,j++){
-        let cur = new dot(player.x + Math.cos(i)*10, player.y + Math.sin(i)*10);
-        shield.push(new segment(prev,cur));
-        prev = cur;
-    }
+	ctx.lineTo(a.x+v1.x+vx,a.y+v1.y+vy);
+	ctx.lineTo(b.x+v2.x+vx,b.y+v2.y+vy);
+
+	ctx.lineTo(b.x+v2.x,b.y+v2.y)
+	ctx.lineTo(b.x,b.y);
+	ctx.lineTo(a.x,a.y);
+	ctx.stroke();
+	ctx.fill();
+	ctx.closePath();
 }
 
 //generates vector field (dynamic matrix for bots' moves)
@@ -667,19 +666,10 @@ lw.onload = function(){
     segments = segments.filter(I => I);
     
     // eventually proper visual debugging
-    ctx2.strokeStyle = '#f00';
+    /*ctx2.strokeStyle = '#f00';
     ctx2.fillStyle = '#0f0';
     ctx2.lineWidth = 2;
     segments.map(I => {
-    		ctx2.beginPath();
-    		ctx2.moveTo(I.a.x,I.a.y);
-    		ctx2.lineTo(I.b.x,I.b.y);
-    		ctx2.stroke();
-    		ctx2.closePath();
-    	}
-	);
-	ctx2.strokeStyle = '#00f';
-	filtered.map(I => {
     		ctx2.beginPath();
     		ctx2.moveTo(I.a.x,I.a.y);
     		ctx2.lineTo(I.b.x,I.b.y);
@@ -700,7 +690,7 @@ lw.onload = function(){
 	);
 	for(let y=s.y-rw_h/2;y<s.y-rw_h/2+height*rw_h*3;y+=rw_h){
 		ctx2.fillText(y+'',0,y)
-	}	
+	}	*/
 }
 //----------------------------------------------------------------------------------------------------------------------------------game loop
 function draw(dT){
@@ -719,7 +709,7 @@ function draw(dT){
     //-------------------------------------------------------------------------draw bots
         
         //bots shadows
-        if(!death.terminated()){
+        /*if(!death.terminated()){
 	        for (let i in bots){
 	            if(sqdist(player,bots[i]) < sqVision){
 	                ctx.beginPath();
@@ -733,11 +723,11 @@ function draw(dT){
 	                let d = new dot(bots[i].x-shadR,bots[i].y+shadR);
 	                let temp = rectangle(a,b,c,d);
 	                for (let j of temp){
-	                    shadow(j.a,j.b,vision*2,'rgba(0,0,0,0.2)');
+	                    shadow(j.a,j.b,'rgba(0,0,0,0.2)');
 	                }
 	            }
 	        }
-  		}
+  		}*/
         
         for(let i in bots){
             ctx.save();
@@ -836,15 +826,9 @@ function draw(dT){
 
         // cast shadows underneath player
         if(!death.terminated()){
-	        generateShield();
-	        for (let i of shield){
-	            shadow(i.a,i.b,vision*2);
-	        }
-	    	// getVisibles(segments,player);
-			for (let i of segments){
-	            let dist = Math.min(sqdist(player,i.a),sqdist(player,i.b));
-	            if(dist < sqVision)
-	                shadow(i.a,i.b,vision*2);
+	    	getVisibles(segments.filter(I=>Math.min(sqdist(player,I.a),sqdist(player,I.b) < sqVision)),player);
+			for (let i of visibles){
+	 			shadow(i.a,i.b);
 	        }
 	        // draw vision area
 	        ctx.beginPath();
@@ -856,7 +840,13 @@ function draw(dT){
 	        
 	        ctx.save();
 	        ctx.translate(player.x,player.y);
-	        ctx.rotate(dir.angle);
+	        ctx.rotate(dir.angle-quarterPi);
+	        ctx.beginPath();
+	        ctx.rect(-vision,-vision,vision*2,vision*2);
+	        ctx.rect(vision,0,-vision,vision);
+	        ctx.fill();
+	        ctx.closePath();
+	        ctx.rotate(quarterPi);
 	    }
         
         if(player.life <= 0){
@@ -870,7 +860,7 @@ function draw(dT){
         else if (player.gotHit() || gotHit.inProgress()){ctx.translate(-gotHit.halfW,-gotHit.halfH);gotHit.render();}
         else if(player.moves()){ctx.translate(-walk.halfW,-walk.halfH); walk.render();gotHit.terminate();}
         else if(player.shoots){ctx.translate(-shot.halfW,-shot.halfH);shot.render();gotHit.terminate();}
-        else {ctx.translate(-idle.halfW,-idle.halfH); idle.render();gotHit.terminate();} 
+        else {ctx.translate(-idle.halfW,-idle.halfH);idle.render();gotHit.terminate();} 
         if(shot.terminated()){ player.shoots=false; shot.terminate();}
         ctx.restore();
         dir.update();
@@ -879,6 +869,19 @@ function draw(dT){
 		ctx.clearRect(0,window.scrollY,halfTab,tab*3)
         for(let i=0;i<player.life;i++)
         	ctx.drawImage(heart,0,window.scrollY+i*halfTab,halfTab,halfTab);
+
+        //debugging segments in sight
+        /*ctx3.clearRect(0,0,w,h);
+        ctx3.lineWidth = 4;
+		ctx3.strokeStyle = '#00f';
+		visibles.map(I => {
+	    		ctx3.beginPath();
+	    		ctx3.moveTo(I.a.x,I.a.y);
+	    		ctx3.lineTo(I.b.x,I.b.y);
+	    		ctx3.stroke();
+	    		ctx3.closePath();
+	    	}
+		);*/
        
     }
     requestAnimationFrame(draw);
