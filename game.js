@@ -975,7 +975,7 @@ function draw(dT){
         		ctx.translate(-death.halfW,-death.halfH);
 				ctx.drawImage(corpse,0,0,death.w,death.h);
 	        	ctx.restore();
-        		if(!once)setTimeout(function(){document.location.reload();},3000);
+        		if(!once)setTimeout(function(){location.reload();},3000);
         		once = true;
         	}
         } 
@@ -1041,4 +1041,6 @@ function draw(dT){
     }
     requestAnimationFrame(draw);
 }
-setTimeout(draw,1000);
+document.addEventListener("DOMContentLoaded", function(e) {
+	draw();
+});
