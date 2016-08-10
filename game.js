@@ -1041,6 +1041,4 @@ function draw(dT){
     }
     requestAnimationFrame(draw);
 }
-document.addEventListener("DOMContentLoaded", function(e) {
-	draw();
-});
+setTimeout(draw,2000);
