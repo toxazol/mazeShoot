@@ -1,4 +1,5 @@
 //-----------------------------------------------------------------------------------------------------vars & constructors init
+let once = false;
 const pi = Math.PI;
 const halfPi = pi/2;
 const quarterPi = pi/4;
@@ -21,12 +22,12 @@ let winHalfH = window.innerHeight/2;
 let h = canvas.height = canvas2.height = canvas3.height = 2*window.innerHeight;
 
 let PAUSE = false;
-const tab = 90;
+const tab = 90; // GLOBAL SCALE
 const eps = tab/18;
 const halfTab = tab/2; 
-const scale = tab/128;
-const ws = scale; // wall scale
-const vision = 300; // sight radius
+const ws = tab/128; // wall scale
+const scale = ws*0.8;
+const vision = tab*3.5; // sight radius
 const shadR = 10; // zombie shadow circle radius
 const sqVision = vision*vision;
 let segments = []; // for shadow casting
@@ -38,6 +39,7 @@ let height = ~~((h-tab*2)/tab);
 let eye1,eye2;
 
 let temp;
+let debugRays = [];
 let s = {x:tab,y:tab}; // startPoint
 
 let player = {
@@ -76,9 +78,8 @@ let player = {
     gotHit(){
     	let self = this;
         for(let z of zombHit){
-            if(z.j+z.speed >= z.mid && z.j <= z.mid){
-            	self.life--;
-            	return true; // punch frame (10th)
+            if(z.j+z.speed >= z.mid && z.j <= z.mid){ // zombie punch frame (sprite middle)
+            	return true; 
             } 
         }
         return false;
@@ -185,10 +186,10 @@ function sprite (sptiteSheet, n, speed=1, scaler=1){
     return that;
 };
 //sprite mechanism initializing
-let walk, idle, shot, gotHit, death, zombWalk = [], zombIdle = [], zombHit = [], zombDeath = [];
+let walk, idle, shot, gotHit, death, blood, zombWalk = [], zombIdle = [], zombHit = [], zombDeath = [];
 let temp1 = new Image();
 temp1.src = "sprites/player_walk.png";
-temp1.onload = function(){walk = sprite(temp1, 12, 0.6);}
+temp1.onload = function(){walk = sprite(temp1, 12, 0.8);}
 let temp3 = new Image();
 temp3.src = "sprites/player_idle.png";
 temp3.onload = function(){idle = sprite(temp3, 20, 0.7);}
@@ -196,7 +197,7 @@ let temp4 = new Image();
 temp4.src = "sprites/zombie1_walk.png";
 temp4.onload = function(){
     for(let i=0;i<3;i++)
-        zombWalk[i] = sprite(temp4, 20,1.2);
+        zombWalk[i] = sprite(temp4, 20,1.4);
 }
 let temp5 = new Image();
 temp5.src = "sprites/zombie1_hit.png";
@@ -209,7 +210,7 @@ temp6.src = "sprites/player_shot.png";
 temp6.onload = function(){shot = sprite(temp6, 20, 0.7);}
 let temp7 = new Image();
 temp7.src = "sprites/player_gotHit.png";
-temp7.onload = function(){gotHit = sprite(temp7, 9, 0.5);}
+temp7.onload = function(){gotHit = sprite(temp7, 9, 1);}
 let temp8 = new Image();
 temp8.src = "sprites/zombie_death1.png";
 temp8.onload = function(){
@@ -225,6 +226,12 @@ temp10.onload = function(){
     for(let i=0;i<3;i++)
         zombIdle[i] = sprite(temp10, 36, 0.8);
 }
+let temp11 = new Image();
+temp11.src = "sprites/blood.png";
+temp11.onload = function(){
+	blood = sprite(temp11, 15, 0.65);
+}
+
 let floor = new Image();
 floor.src = "sprites/floor.jpg";
 let floorPat; 
@@ -235,19 +242,44 @@ let lw = new Image();
 lw.src = "sprites/lower_wall.jpg";
 let heart = new Image();
 heart.src = "sprites/heart.png";
+let corpse = new Image();
+corpse.src = "sprites/corpse.png";
 
 let lasTdT = null;
 let cursor={
   x: player.x,
   y: player.y,
 };
-function dot(x,y){
+function dot(x=0,y=0){
     this.x = x;
     this.y = y;
+    this.eq = function(o){
+    	let self = this;
+    	return epsEq(self.x,o.x) && epsEq(self.y,o.y);
+    }
+    this.rotate = function(ang){
+    	let self = this;
+		let x = self.x, y = self.y;
+		let newX = Math.cos(ang)*x-Math.sin(ang)*y;
+		let newY = Math.sin(ang)*x+Math.cos(ang)*y;
+		return new dot(newX,newY);
+	}
 }
 function segment(a,b){
     this.a = a;
     this.b = b;
+    this.eq = function(seg){
+    	let self = this;
+    	return self.a.eq(seg.a) && self.b.eq(seg.b);
+    }
+    this.vertical = function(){
+    	let self = this;
+    	return epsEq(self.a.x, self.b.x); 
+    }
+    this.horizontal = function(){
+    	let self = this;
+    	return epsEq(self.a.y, self.b.y);
+    }
     this.concat = function(seg){
     	let self = this;
     	self.b = seg.b;
@@ -303,6 +335,19 @@ function noBot(i,j){
 function epsEq(a,b){
 	return Math.abs(a-b) < eps;
 }
+function distToSeg(source, seg){
+	if(seg.vertical()){
+		if(between(seg.a.y,source.y,seg.b.y)){
+			return Math.abs(source.x-seg.a.x);
+		}
+	}
+	else{
+		if(between(seg.a.x,source.x,seg.b.x))
+			return Math.abs(source.y-seg.a.y);
+	}
+	let sq = Math.min(sqdist(source,seg.a), sqdist(source,seg.b));
+	return Math.sqrt(sq);
+}
 function rectangle(a,b,c,d){ // use with spread ...
     let temp = [];
     temp.push(new segment(a,b));
@@ -317,24 +362,48 @@ function notConsistsIn(arr,seg){ // works faster than array.some()
     }
     return true;
 }
+function getUniqueDots(segments){
+	let dots = [];
+	for(let i=0;i<segments.length;i++){
+		if(!dots.some(o=>o.eq(segments[i].a)))dots.push(segments[i].a);
+		if(!dots.some(o=>o.eq(segments[i].b)))dots.push(segments[i].b);
+	}
+	return dots;
+}
 let visibles = [];
 function getVisibles(segments,player){
     visibles = [];
+    let dots = getUniqueDots(segments);
+    dots = dots.filter(o=>sqdist(player,o)<=sqVision)
+    let rays = [];
+    for(let o of dots){
+    	let ray = new dot(o.x-player.x, o.y-player.y);
+    	let rayAng = Math.atan2(ray.y,ray.x);
+    	if(mod360(mod360(rayAng)-mod360(dir.angle)) < quarterPi || mod360(mod360(dir.angle)-mod360(rayAng)) < quarterPi){
+	    	//rays.push(ray);
+	    	rays.push(ray.rotate(0.01));
+	    	rays.push(ray.rotate(-0.01));
+	    }
+    }
+    let aux = new dot(dir.x,dir.y);
+    rays.push(aux.rotate(quarterPi));
+    rays.push(aux.rotate(-quarterPi));
+    //debugRays = [];
     let intersects = [];
-    let start = dir.angle-quarterPi;
-    let finish = dir.angle+quarterPi;
-    for(let v=start;v<finish;v+=0.01){ // try different angle increment
+    for(let ray of rays){ 
         intersects = [];
-        ray = new dot(Math.cos(v), Math.sin(v));
         for(seg of segments){
-            let dot = newSegRay(seg,ray,player);
-            if(dot) intersects.push({dot:dot,seg:seg});
+            let doT = newSegRay(seg,ray,player);
+            if(doT && sqdist(player,doT)<=sqVision){ 
+            	intersects.push({dot:doT,seg:seg});
+            }
         }
         if(intersects.length){
             intersects.sort((a,b)=>sqdist(a.dot,player)-sqdist(b.dot,player));
-            //if(!visibles.some(o=>obj(o)==obj(intersects[0].seg)))
-            if(notConsistsIn(visibles,intersects[0].seg))
+            //debugRays.push(new dot(intersects[0].dot.x-player.x,intersects[0].dot.y-player.y));
+            if(notConsistsIn(visibles,intersects[0].seg)){
             	visibles.push(intersects[0].seg);
+            }
         }
     }
 }
@@ -342,11 +411,11 @@ function vecAngle(vec){
     return Math.atan2(vec.y,vec.x);
 }
 function between(a,x,b){
-    if(x>a&&x<b || x>b&&x<a)return true;
+    if(x>=a&&x<=b || x>=b&&x<=a)return true;
     return false;
 }
 function newSegRay(seg,ray,s){
-	if(epsEq(seg.a.x, seg.b.x)){
+	if(seg.vertical()){
 		let t = (seg.a.x-s.x)/ray.x;
 		if(t > 0){
 			let y = s.y+ray.y*t;
@@ -703,7 +772,7 @@ lw.onload = function(){
 	);
 	for(let y=s.y-rw_h/2;y<s.y-rw_h/2+height*rw_h*3;y+=rw_h){
 		ctx2.fillText(y+'',0,y)
-	}	*/
+	}*/	
 }
 //----------------------------------------------------------------------------------------------------------------------------------game loop
 function draw(dT){
@@ -722,12 +791,12 @@ function draw(dT){
     //-------------------------------------------------------------------------draw bots
         
         //bots shadows
-        /*if(!death.terminated()){
+        if(!death.terminated()){
 	        for (let i in bots){
 	            if(sqdist(player,bots[i]) < sqVision){
 	                ctx.beginPath();
 	                ctx.arc(bots[i].x,bots[i].y,shadR*1.3,0,pi*2);
-	                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+	                ctx.fillStyle = 'rgba(0,0,0,0.3)';
 	                ctx.fill();
 	                ctx.closePath();
 	                let a = new dot(bots[i].x-shadR,bots[i].y-shadR);
@@ -736,11 +805,11 @@ function draw(dT){
 	                let d = new dot(bots[i].x-shadR,bots[i].y+shadR);
 	                let temp = rectangle(a,b,c,d);
 	                for (let j of temp){
-	                    shadow(j.a,j.b,'rgba(0,0,0,0.2)');
+	                    shadow(j.a,j.b,'rgba(0,0,0,0.3)');
 	                }
 	            }
 	        }
-  		}*/
+  		}
         
         for(let i in bots){
             ctx.save();
@@ -757,8 +826,16 @@ function draw(dT){
             if(!death.inProgress() && !death.terminated()){
 	            if(player.HIT == i || zombDeath[i].inProgress()){
 	                bots[i].dead = true;
+	                ctx.save();
 	                ctx.translate(-zombDeath[i].halfW,-zombDeath[i].halfH);
 	                zombDeath[i].render();
+	                ctx.restore();
+	                if(!blood.terminated()){
+	                	ctx.translate(-blood.halfW+zombDeath[i].halfW/3,-blood.halfH);
+	                	blood.render();
+	                }
+	                if(zombDeath[i].terminated())
+	                	blood.terminate();
 	                player.HIT = null;
 	            }
 	            else if(bots[i].attacks()){
@@ -780,32 +857,32 @@ function draw(dT){
 	        }
             ctx.restore();
         }
-    //---------------------------------------------------------------------------------------------------------------------move player & bots
-        if(!death.inProgress() && !death.terminated()){
-	        if(KEY.key87 &&  dir.right && noBot(player.i,player.j+1) 
+    //--------------------------------------------------------------------------------------------------------move player & bots
+        if(!death.inProgress() && !death.terminated() && !player.gotHit() && !gotHit.inProgress()){
+	        if(KEY.key87 &&  dir.right && noBot(player.i,player.j+1)
 	        	&& maze[player.i][player.j].r!=1 && go.Rt>=tab && go.Dn>=tab && go.Up>=tab) go.Rt-=tab;
-	        if(KEY.key87 &&  dir.up && player.i>0 && noBot(player.i-1,player.j) 
+	        if(KEY.key87 && dir.up && player.i>0 && noBot(player.i-1,player.j)
 	        	&& maze[player.i-1][player.j].l!=1 && go.Up>=tab && go.Rt>=tab && go.Lt>=tab) go.Up-=tab;
-	        if(KEY.key87 &&  dir.down && noBot(player.i+1,player.j) 
+	        if(KEY.key87 &&  dir.down && noBot(player.i+1,player.j)
 	        	&& maze[player.i][player.j].l!=1 && go.Dn>=tab && go.Rt>=tab && go.Lt>=tab) go.Dn-=tab;
-	        if(KEY.key87 &&  dir.left && player.j>0 && noBot(player.i,player.j-1) 
+	        if(KEY.key87 &&  dir.left && player.j>0 && noBot(player.i,player.j-1)
 	        	&& maze[player.i][player.j-1].r!=1 && go.Lt>=tab && go.Dn>=tab && go.Up>=tab) go.Lt-=tab;
-	        if(go.Rt < tab){
+	        if(go.Rt < tab && noBot(player.i,player.j+1)){
 	            player.x+=player.step;
 	            go.Rt+=player.step;
 	            if(go.Rt >= tab ) player.j++;
 	        }
-	        if(go.Lt < tab){
+	        if(go.Lt < tab && player.j>0 && noBot(player.i,player.j-1)){
 	            player.x-=player.step;
 	            go.Lt+=player.step;
 	            if(go.Lt >= tab) player.j--;
 	        }
-	        if(go.Up < tab){
+	        if(go.Up < tab && player.i>0 && noBot(player.i-1,player.j)){
 	            player.y-=player.step;
 	            go.Up+=player.step;
 	            if(go.Up >= tab) player.i--;
 	        }
-	         if(go.Dn < tab){
+	         if(go.Dn < tab && noBot(player.i+1,player.j)){
 	            player.y+=player.step;
 	            go.Dn+=player.step;
 	            if(go.Dn >= tab) player.i++;
@@ -839,7 +916,7 @@ function draw(dT){
 
         // cast shadows underneath player
         if(!death.terminated()){
-	    	getVisibles(segments,player);
+	    	getVisibles(segments.filter(I=>distToSeg(player,I)<vision),player);
 	    	eye1 = new dot(player.x+Math.cos(dir.angle-quarterPi)*tab/9,player.y+Math.sin(dir.angle-quarterPi)*tab/9);
 	    	eye2 = new dot(player.x+Math.cos(dir.angle+quarterPi)*tab/9,player.y+Math.sin(dir.angle+quarterPi)*tab/9);
 			for (let i of visibles){
@@ -871,34 +948,57 @@ function draw(dT){
 		        ctx.fill();
 		        ctx.closePath();
 		        ctx.rotate(quarterPi);
+		        ctx.rotate(quarterPi-pi/32);
+		        ctx.beginPath();
+		        ctx.rect(0,0,vision,vision);
+		        ctx.fillStyle = 'rgba(0,0,0,0.5)'
+		        ctx.fill();
+		        ctx.closePath();
+		        ctx.rotate(-quarterPi+pi/32);
+		        ctx.rotate(-quarterPi+pi/32);
+		        ctx.beginPath();
+		        ctx.rect(0,0,vision,-vision);
+		        ctx.fill();
+		        ctx.closePath();
+		        ctx.rotate(quarterPi-pi/32);
 		    }
 	    }
-        
         if(player.life <= 0){
         	if(!death.terminated()){
 	        	ctx.translate(-death.halfW,-death.halfH);
 	        	death.render();
 	        }
-        	else
-        		setTimeout(function(){document.location.reload();},3000);
+        	else{
+        		ctx.save();
+	        	ctx.translate(player.x,player.y);
+	        	ctx.rotate(dir.angle);
+        		ctx.translate(-death.halfW,-death.halfH);
+				ctx.drawImage(corpse,0,0,death.w,death.h);
+	        	ctx.restore();
+        		if(!once)setTimeout(function(){document.location.reload();},3000);
+        		once = true;
+        	}
         } 
-        else if (player.gotHit() || gotHit.inProgress()){ctx.translate(-gotHit.halfW,-gotHit.halfH);gotHit.render();}
+        else if ((player.gotHit()&&player.life--) || gotHit.inProgress()){
+        	ctx.translate(-gotHit.halfW,-gotHit.halfH);
+        	gotHit.render();
+        }
         else if(player.moves()){ctx.translate(-walk.halfW,-walk.halfH); walk.render();gotHit.terminate();}
         else if(player.shoots){ctx.translate(-shot.halfW,-shot.halfH);shot.render();gotHit.terminate();}
         else {ctx.translate(-idle.halfW,-idle.halfH);idle.render();gotHit.terminate();} 
         if(shot.terminated()){ player.shoots=false; shot.terminate();}
         ctx.restore();
-        dir.update();
+        if(!death.inProgress() && !death.terminated()) dir.update();
 
         // draw hearts
-		ctx.clearRect(0,window.scrollY,halfTab,tab*3)
+		ctx.clearRect(0,window.scrollY,halfTab,tab*(player.life+1))
         for(let i=0;i<player.life;i++)
         	ctx.drawImage(heart,0,window.scrollY+i*halfTab,halfTab,halfTab);
 
         //debugging segments in sight
         /*ctx3.clearRect(0,0,w,h);
         ctx3.lineWidth = 4;
-		ctx3.strokeStyle = '#00f';
+		ctx3.strokeStyle = '#0f0';
 		visibles.map(I => {
 	    		ctx3.beginPath();
 	    		ctx3.moveTo(I.a.x,I.a.y);
@@ -907,6 +1007,7 @@ function draw(dT){
 	    		ctx3.closePath();
 	    	}
 		);*/
+		//debug eyes
 		/*ctx3.clearRect(0,0,w,h);
 		ctx3.beginPath();
         ctx3.arc(eye1.x,eye1.y,3,0,pi*2);
@@ -924,6 +1025,18 @@ function draw(dT){
     	ctx3.fillStyle = 'cyan';
         ctx3.fill();
         ctx3.closePath();*/
+       
+        //debug rays
+        /*ctx3.lineWidth = 0.5;
+		ctx3.strokeStyle = '#00f';
+		debugRays.map(I => {
+	    		ctx3.beginPath();
+	    		ctx3.moveTo(player.x, player.y);
+	    		ctx3.lineTo(player.x+I.x,player.y+I.y);
+	    		ctx3.stroke();
+	    		ctx3.closePath();
+	    	}
+		);*/
        
     }
     requestAnimationFrame(draw);
